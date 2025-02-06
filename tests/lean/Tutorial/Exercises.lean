@@ -830,7 +830,15 @@ theorem toInt_aux_drop (l : List U32) (i : Nat) (h0 : i < l.length) :
 @[simp]
 theorem toInt_aux_update (l : List U32) (i : Nat) (x : U32) (h0 : i < l.length) :
   toInt_aux (l.update i x) = toInt_aux l + 2 ^ (32 * i) * (x - l.index i) := by
-  sorry
+  -- NOTE: Updating a position is the same as adding the difference of changes to that position
+  match l, i with
+  | [], _ =>  contradiction
+  | hd::tl, 0 => simp; scalar_tac
+  | hd::tl, i+1 => 
+      simp
+      have := toInt_aux_update tl i x (by simp at h0; assumption)
+      simp[this]
+      scalar_nf
 
 /-- The proof about `add_no_overflow_loop`.
 
