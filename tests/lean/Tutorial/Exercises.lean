@@ -634,7 +634,34 @@ theorem zero_loop_spec
     (∀ j, i.toNat ≤ j → j < x.length → x'.val.index j = 0#u32) := by
   rw [zero_loop]
   simp
-  sorry
+  split
+  case isTrue i_idx =>
+    progress as ⟨_, back⟩
+    progress as ⟨i2, i2_spec⟩
+    progress as ⟨x', x'_len, x'_lhs, x'_rhs⟩ -- Inductive step
+                                             -- It's terminating if we perform the induction on the idx
+    split_conjs
+    · simp [x'_len]
+    · intro j j_lt_i
+      /- have x'_lhs := x'_lhs j -/
+      have: j < i2.toNat := by scalar_tac
+      simp [x'_lhs j this, List.index_update_neq, j_lt_i]
+    · intro j i_le_j j_idx
+      cases eq_or_lt_of_le i_le_j
+      case inl i_eq_j => 
+        have: j < i2.toNat := by scalar_tac
+        simp [x'_lhs j this, i_eq_j, List.index_update_eq, j_idx]
+      case inr i_lt_j =>
+        have: ↑i2-(1: Int)< j := by scalar_tac
+        apply x'_rhs
+        · scalar_tac
+        · simp [List.length_update, j_idx]
+  case isFalse i_oob =>
+    simp
+    intros
+    scalar_tac
+termination_by x.length - i.toNat
+decreasing_by scalar_decr_tac
 
 /- [tutorial::zero]:
    Source: 'src/lib.rs', lines 5:0-5:28 -/
@@ -668,7 +695,18 @@ theorem all_nil_impl_toInt_eq_zero
        sorry
      ```
    -/
-  sorry
+   match l with 
+   | [] => simp
+   | hd :: tl =>
+      have: hd = 0#u32 := by 
+        apply h 0
+        scalar_tac
+      rw [this]
+      simp; simp at h
+      apply all_nil_impl_toInt_eq_zero
+      intro j j_tl_idx
+      have h := h (j+1) (by simp[j_tl_idx])
+      assumption
 
 /-- The theorem about `zero` -/
 theorem zero_spec (x : alloc.vec.Vec U32) :
@@ -677,7 +715,11 @@ theorem zero_spec (x : alloc.vec.Vec U32) :
     x'.length = x.length ∧
     toInt x' = 0 := by
   rw [zero]
-  sorry
+  progress as ⟨x', x'_len, _, x'_rhs⟩; simp [*]
+  rw [toInt]
+  apply all_nil_impl_toInt_eq_zero
+  intros
+  apply x'_rhs _ <;> scalar_tac
 
 /- [tutorial::add_no_overflow]: loop 0:
    Source: 'src/lib.rs', lines 19:4-24:1 -/
@@ -745,12 +787,43 @@ theorem add_no_overflow_loop_spec
   -- No overflow occurs when we add the individual thunks
   (hNoOverflow : ∀ (j : Nat), i.toNat ≤ j → j < x.length → (x.val.index j).val + (y.val.index j).val ≤ U32.max)
   (hi : i.val ≤ x.length) :
-  ∃ x', add_no_overflow_loop x y i = ok x' ∧
-  x'.length = x.length ∧
-  toInt x' = toInt x + 2 ^ (32 * i.toNat) * toInt_aux (y.val.drop i.toNat) := by
+  ∃ x', 
+    add_no_overflow_loop x y i = ok x' ∧
+    x'.length = x.length ∧
+    toInt x' = toInt x + 2 ^ (32 * i.toNat) * toInt_aux (y.val.drop i.toNat) := by
   rw [add_no_overflow_loop]
   simp
-  sorry
+  split
+  case isFalse i_oob =>
+    have: i.toNat = x.length := by scalar_tac
+    simp [this, toInt_aux_drop, hLength]
+  case isTrue i_idx =>
+    progress as ⟨y_i, y_i_def⟩
+    progress as ⟨x_i, x_i_def⟩
+    progress as ⟨z_i, z_i_def⟩
+    · simp [x_i_def, y_i_def]
+      apply hNoOverflow <;> scalar_tac
+    progress as ⟨succ_i, succ_i_def⟩
+    progress as ⟨x', x'Length, x'Post⟩
+    · intro j succ_i_le_j
+      simp [succ_i_le_j, ]
+      -- TODO: I can't seem to make this be immediately deduced by Lean
+      -- NOTE: This was mainly a problem with different types representing the 
+      --       same thing. We have i : U32 but j : ℕ
+      have: (x.val.update i.toNat z_i).index j = x.val.index j := by
+        apply List.index_update_neq x.val i.toNat j _ (by scalar_tac)
+      -- NOTE: In general, it seems better to introduce all hypothesis if
+      --       possible, since the difference in representation may not make
+      --       certain matches happen automatically. In this case, for instance,
+      --       we don't have j < x.length, but j < ↑x.length
+      intro j_idx
+      simp [this, hNoOverflow j (by scalar_tac) (by scalar_tac)]
+    split_conjs
+    · simp [x'Length]
+    · simp [toInt_aux_update, toInt_aux_drop, x'Post, succ_i_def]
+      -- TODO: Continue from here
+      sorry
+
 
 /- [tutorial::add_no_overflow]:
    Source: 'src/lib.rs', lines 18:0-18:50 -/
