@@ -461,7 +461,8 @@ theorem list_nth_mut1_spec {T: Type} [Inhabited T] (l : CList T) (i : U32)
   case CCons hd tl =>
     simp
     split
-    case isTrue i_zero => simp [(Scalar.eq_equiv i 0#u32).mp i_zero]
+    case isTrue i_zero => 
+      simp [i_zero]
     case isFalse i_nzero =>
       have:= @U32.sub_spec i 1#u32 (by scalar_tac)
       have⟨i1, i1_st, i1_post⟩ := this
@@ -469,12 +470,8 @@ theorem list_nth_mut1_spec {T: Type} [Inhabited T] (l : CList T) (i : U32)
       rw[<-list_nth_mut1]
       have:= list_nth_mut1_spec tl i1 -- Induction
       have⟨get, set, st, post⟩ := this (by scalar_tac)
-      simp [st, post]
       have: ↑i = ↑i1 + (1 : Int) := by scalar_tac
-      split_conjs
-      · simp [this]
-      · rename_i i1_i_pred prev_get prev_set
-        simp [this]
+      simp [st, post, this]
 
 
 /- [tutorial::list_tail]: loop 0:
