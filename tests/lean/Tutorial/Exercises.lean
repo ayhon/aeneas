@@ -925,7 +925,10 @@ theorem add_no_overflow_spec (x : alloc.vec.Vec U32) (y : alloc.vec.Vec U32)
   x'.length = y.length ∧
   toInt x' = toInt x + toInt y := by
   rw [add_no_overflow]
-  sorry
+  progress as ⟨x', x'Len, x'Post⟩
+  ·intro j j_pos j_idx
+   apply hNoOverflow; assumption
+  split_conjs <;> simp [hLength,x'Len,x'Post]
 
 /- [tutorial::add_with_carry]: loop 0:
    Source: 'src/lib.rs', lines 39:4-50:1 -/
