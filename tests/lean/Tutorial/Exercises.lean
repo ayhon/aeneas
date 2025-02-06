@@ -791,13 +791,14 @@ theorem add_no_overflow_loop_spec
     add_no_overflow_loop x y i = ok x' ∧
     x'.length = x.length ∧
     toInt x' = toInt x + 2 ^ (32 * i.toNat) * toInt_aux (y.val.drop i.toNat) := by
+    -- ⟦x'⟧ = ⟦x⟧ + ⟦y[i:]⟧
   rw [add_no_overflow_loop]
   simp
   split
   case isFalse i_oob =>
     have: i.toNat = x.length := by scalar_tac
     simp [this, toInt_aux_drop, hLength]
-  case isTrue i_idx =>
+  case isTrue i_idx => 
     progress as ⟨y_i, y_i_def⟩
     progress as ⟨x_i, x_i_def⟩
     progress as ⟨z_i, z_i_def⟩
@@ -807,7 +808,7 @@ theorem add_no_overflow_loop_spec
     progress as ⟨x', x'Length, x'Post⟩
     · intro j succ_i_le_j
       simp [succ_i_le_j, ]
-      -- TODO: I can't seem to make this be immediately deduced by Lean
+      -- WARN: I can't seem to make this be immediately deduced by Lean
       -- NOTE: This was mainly a problem with different types representing the 
       --       same thing. We have i : U32 but j : ℕ
       have: (x.val.update i.toNat z_i).index j = x.val.index j := by
@@ -815,16 +816,60 @@ theorem add_no_overflow_loop_spec
       -- NOTE: In general, it seems better to introduce all hypothesis if
       --       possible, since the difference in representation may not make
       --       certain matches happen automatically. In this case, for instance,
-      --       we don't have j < x.length, but j < ↑x.length
+      --       we don't have j < x.length, but j < ↑x.length. However, hNoOverflow
+      --       doesn't work because we don't automatically relate them. If I put
+      --       j < ↑x.length in the hypothesis, however, the `scalar_tac` is able
+      --       to match them.
       intro j_idx
       simp [this, hNoOverflow j (by scalar_tac) (by scalar_tac)]
     split_conjs
     · simp [x'Length]
-    · simp [toInt_aux_update, toInt_aux_drop, x'Post, succ_i_def]
-      -- TODO: Continue from here
-      sorry
+    · -- Goal: ⟦x'⟧ = ⟦x⟧  +  2^(32·i) · ⟦ y[i:]⟧
+      -- Hypo: ⟦x'⟧ = ⟦{x with i := z_i}⟧ + 2 ^(32·(i+1)) · ⟦y[i+1:]⟧
+      rw [x'Post, toInt]
+      -- I can probably close this branch with `scalar_tac` as long as I do
+      -- the proper unfolding of `drop` and `update`. Then, I just need to
+      -- check 
+      -- Another idea would be to push the operations to each component. Since
+      -- we consider no overflows and no carry, we can probably prove this by
+      -- proving that all components of both vectors are the same. But we would
+      -- need other types of lemmas, and it doesn't seem to be that direct. Better
+      -- to stick with the current approach.
+      -- Actually, scratch that last idea, it doesn't work because the definition
+      -- I was thinking of was that of `toInt`, but here we're doing ⟦x + y⟧ = ⟦x⟧ + ⟦y⟧
+      -- and not ⟦x :: tl⟧ = x + 2^(32) ⟦tl⟧
+      -- NOTE: Applying rewrites with preconditions sucks (or idk how to do it)
+      simp [succ_i_def]
 
+      have := toInt_aux_update x.val i.toNat z_i (by scalar_tac)
+      rw [this]
+      have := toInt_aux_drop y.val i.toNat  (by scalar_tac)
+      rw [this, <-y_i_def, <-x_i_def, z_i_def, toInt]
+      simp
+      /-
+      I now have the following
 
+        ⊢ toInt_aux ↑x + 2 ^ (32 * (↑i).toNat) * 
+            ↑y_i + 2 ^ (32 * ((↑i).toNat + 1)) * toInt_aux (List.drop ((↑i).toNat + 1) ↑y) =
+          toInt_aux ↑x + 2 ^ (32 * (↑i).toNat) * 
+           (↑y_i + 2 ^ 32 * toInt_aux (List.drop ((↑i).toNat + 1) ↑y))
+      
+      Which is trivially true. However, `scalar_tac` doesn't seem to be able to close the goal
+      -/
+      try scalar_tac; done
+      -- I close it by manually applying rewrites and theorems
+      generalize toInt_aux (List.drop (i.toNat + 1) ↑y) = tmp
+      rw [Int.add_assoc]
+      apply congrArg (toInt_aux ↑x + ·)
+      simp [Int.mul_add, <-Int.mul_assoc]
+      apply Or.inl -- I find this disjuntion weird
+      simp [Nat.mul_add]
+      generalize 32 * i.toNat = aux
+      /- exact Nat.pow_add 2 aux 32 -/ -- NOTE: This enters an infinite loop
+      exact pow_add 2 aux 32
+      -- We have to use mathlib's pow_add. Why?
+
+      
 /- [tutorial::add_no_overflow]:
    Source: 'src/lib.rs', lines 18:0-18:50 -/
 def add_no_overflow
