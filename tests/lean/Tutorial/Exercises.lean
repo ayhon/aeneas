@@ -739,6 +739,16 @@ divergent def add_no_overflow_loop
     add_no_overflow_loop x1 y i5
   else Result.ok x
 
+theorem List.drop_index_unfold[Inhabited α](i: Nat)(ls: List α)
+(i_idx: i < ls.length)
+: ls.drop i = ls.index i :: ls.drop (i+1)
+:= by
+  match ls, i with
+  | [], _  => contradiction
+  | x::xs, 0 => simp
+  | x::xs, i+1 => simp at *; apply List.drop_index_unfold; assumption
+    
+
 /-- You will need this lemma for the proof of `add_no_overflow_loop_spec`.
 
     Advice: do the proof of `add_no_overflow_loop_spec` first, then come back to prove this lemma.
@@ -752,7 +762,57 @@ divergent def add_no_overflow_loop
 @[simp]
 theorem toInt_aux_drop (l : List U32) (i : Nat) (h0 : i < l.length) :
   toInt_aux (l.drop i) = l.index i + 2 ^ 32 * toInt_aux (l.drop (i + 1)) := by
-  sorry
+  -- NOTE: Droping i elements is the same as keeping the i-th and droping i+1
+  simp [List.drop_index_unfold i l h0]
+
+  
+  --- NOTE: This is a first attempt which I commented out because I wasn't too
+  ---       sure of what I was doing. I was having problems understanding where
+  ---       the recursion should happen, and I think in general I've developed
+  ---       a tendency to not do a double induction too freely, since it has 
+  ---       happened in the past that the induction hypothesis simply get out
+  ---       of hand. I took a minute to think about the proof, and tried to do
+  ---       the induction on `l.drop i` at some point. This lead nowhere, but
+  ---       helped me realize the fundamental property of `drop` and `index`
+  ---       that we were actually exploiting here, `List.drop_index_unfold`.
+  ---       With it, toInt_aux_drop is just a result of applying the definition
+  ---       of toInt_aux. Furthermore, I implemented `List.drop_index_unfold`
+  ---       in a more functional style, which helped me manage the complexity
+  ---       of multiple induction. I'm quite happy with how simple the proofs
+  ---       have turned out.
+
+  /- let rec last_of_drop_len_sub_1{α: Type}(ls: List α)(nonempty: ls ≠ []) -/
+  /- : ls.drop (ls.length - 1) = [ls.getLast nonempty] -/
+  /- := by -/
+  /-   match ls with -/
+  /-   | x :: [] => simp -/
+  /-   | _ :: y :: ys => -/ 
+  /-     simp [List.getLast] -/
+  /-     exact last_of_drop_len_sub_1 (y :: ys) (List.cons_ne_nil y ys) -/
+  /- let rec last_of_index_len_sub_1{α: Type}[Inhabited α](ls: List α)(nonempty: ls ≠ []) -/
+  /- : ls.index (ls.length - 1) = ls.getLast nonempty -/
+  /- := by -/
+  /-   match ls with -/
+  /-   | x :: [] => simp -/
+  /-   | _ :: y :: ys  => -/ 
+  /-     simp [List.getLast] -/
+  /-     apply last_of_index_len_sub_1 -/
+      
+
+  /- if h: l = [] then -/
+  /-   subst h -/
+  /-   contradiction -/
+  /- else -/
+  /-   have: 1 <= l.length := by exact Nat.one_le_of_lt h0 -/
+  /-   if i = l.length - 1 then -/
+  /-     subst i -/
+  /-     rw [Nat.sub_add_cancel (by assumption)] -/
+  /-     simp [ toInt_aux -/
+  /-          , last_of_drop_len_sub_1 l h -/
+  /-          , last_of_index_len_sub_1 l h] -/
+  /-   else -/
+
+
 
 /-- You will need this lemma for the proof of `add_no_overflow_loop_spec`.
 
