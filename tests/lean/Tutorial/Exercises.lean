@@ -829,45 +829,19 @@ theorem add_no_overflow_loop_spec
       rw [x'Post, toInt]
       -- I can probably close this branch with `scalar_tac` as long as I do
       -- the proper unfolding of `drop` and `update`. Then, I just need to
-      -- check 
-      -- Another idea would be to push the operations to each component. Since
-      -- we consider no overflows and no carry, we can probably prove this by
-      -- proving that all components of both vectors are the same. But we would
-      -- need other types of lemmas, and it doesn't seem to be that direct. Better
-      -- to stick with the current approach.
-      -- Actually, scratch that last idea, it doesn't work because the definition
-      -- I was thinking of was that of `toInt`, but here we're doing ⟦x + y⟧ = ⟦x⟧ + ⟦y⟧
-      -- and not ⟦x :: tl⟧ = x + 2^(32) ⟦tl⟧
-      -- NOTE: Applying rewrites with preconditions sucks (or idk how to do it)
+      -- check equality of the expressioons with `scalar_tac`
       simp [succ_i_def]
-
+      -- NOTE: Applying rewrites with preconditions sucks (or idk how to do it)
       have := toInt_aux_update x.val i.toNat z_i (by scalar_tac)
       rw [this]
       have := toInt_aux_drop y.val i.toNat  (by scalar_tac)
       rw [this, <-y_i_def, <-x_i_def, z_i_def, toInt]
       simp
-      /-
-      I now have the following
-
-        ⊢ toInt_aux ↑x + 2 ^ (32 * (↑i).toNat) * 
-            ↑y_i + 2 ^ (32 * ((↑i).toNat + 1)) * toInt_aux (List.drop ((↑i).toNat + 1) ↑y) =
-          toInt_aux ↑x + 2 ^ (32 * (↑i).toNat) * 
-           (↑y_i + 2 ^ 32 * toInt_aux (List.drop ((↑i).toNat + 1) ↑y))
-      
-      Which is trivially true. However, `scalar_tac` doesn't seem to be able to close the goal
-      -/
-      try scalar_tac; done
-      -- I close it by manually applying rewrites and theorems
-      generalize toInt_aux (List.drop (i.toNat + 1) ↑y) = tmp
-      rw [Int.add_assoc]
-      apply congrArg (toInt_aux ↑x + ·)
-      simp [Int.mul_add, <-Int.mul_assoc]
-      apply Or.inl -- I find this disjuntion weird
-      simp [Nat.mul_add]
-      generalize 32 * i.toNat = aux
-      /- exact Nat.pow_add 2 aux 32 -/ -- NOTE: This enters an infinite loop
-      exact pow_add 2 aux 32
-      -- We have to use mathlib's pow_add. Why?
+      -- NOTE: Since the expression is not linear, we use `ring_nf` instead of 
+      --       `scalar_tac`, although there is a `nonLin` option for it.
+      ring_nf 
+termination_by x.length - i.toNat
+decreasing_by scalar_tac
 
       
 /- [tutorial::add_no_overflow]:
