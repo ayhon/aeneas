@@ -937,28 +937,30 @@ divergent def add_with_carry_loop
   Result (U8 × (alloc.vec.Vec U32))
   :=
   let i1 := alloc.vec.Vec.len x
+  -- i1 is the length of the vector
+  -- i is the counter of the loop
   if i < i1
   then
     do
-    let i2 ←
+    let i2 ← -- x[i]
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSliceTInst
         U32) x i
-    let i3 ← Scalar.cast .U32 c0
-    let p ← core.num.U32.overflowing_add i2 i3
-    let (sum, c1) := p
-    let i4 ←
+    let i3 ← Scalar.cast .U32 c0 -- carry
+    let p ← core.num.U32.overflowing_add i2 i3 -- (x[i] + carry) with overflow
+    let (sum, c1) := p -- (sum, didOverflowCarry)
+    let i4 ← -- y[i]
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSliceTInst U32) y i
-    let p1 ← core.num.U32.overflowing_add sum i4
-    let (sum1, c2) := p1
+    let p1 ← core.num.U32.overflowing_add sum i4 -- (sum + y[i]) with overflow
+    let (sum1, c2) := p1 -- (final, didOverflowFinal)
     let i5 ← Scalar.cast_bool .U8 c1
     let i6 ← Scalar.cast_bool .U8 c2
-    let c01 ← i5 + i6
-    let (_, index_mut_back) ←
+    let c01 ← i5 + i6 -- didOverflowCarry + didOverflowFinal
+    let (_, index_mut_back) ← -- &mut x[i]
       alloc.vec.Vec.index_mut
         (core.slice.index.SliceIndexUsizeSliceTInst U32) x i
-    let i7 ← i + 1#usize
-    let x1 := index_mut_back sum1
-    add_with_carry_loop x1 y c01 i7
+    let i7 ← i + 1#usize -- next idx
+    let x1 := index_mut_back sum1 -- mutated vec
+    add_with_carry_loop x1 y c01 i7 -- recurse!
   else Result.ok (c0, x)
 
 /-- The proof about `add_with_carry_loop` -/
@@ -968,14 +970,111 @@ theorem add_with_carry_loop_spec
   (hLength : x.length = y.length)
   (hi : i.val ≤ x.length)
   (hCarryLe : c0.val ≤ 1) :
-  ∃ x' c1, add_with_carry_loop x y c0 i = ok (c1, x') ∧
-  x'.length = x.length ∧
-  c1.val ≤ 1 ∧
-  toInt x' + c1.val * 2 ^ (32 * x'.length) =
+  ∃ x' c1,
+    add_with_carry_loop x y c0 i = ok (c1, x') ∧ -- statement
+    x'.length = x.length ∧ -- x'Len
+    c1.val ≤ 1 ∧ -- c1 is "bool"
+    -- ↓ loop_invariant
+    toInt x' + c1.val * 2 ^ (32 * x'.length) = 
     toInt x + 2 ^ (32 * i.toNat) * toInt_aux (y.val.drop i.toNat) + c0.val * 2 ^ (32 * i.toNat) := by
   rw [add_with_carry_loop]
   simp
-  sorry
+  split
+  case isFalse i_oob =>
+    have: i.toNat = x.length := by scalar_tac
+    simp [*]
+  case isTrue i_idx =>
+    progress as ⟨x_i, x_i_def⟩
+    progress as ⟨c0', c0'_def⟩
+    progress as ⟨sum_1, didOverflow_1, sum_1_def⟩
+    progress as ⟨y_i, y_i_def⟩
+    progress as ⟨sum_2, didOverflow_2, sum_2_def⟩
+    progress as ⟨u1, u1_def⟩
+    progress as ⟨u2, u2_def⟩
+    progress as ⟨c01, c01_def⟩
+    progress as ⟨x_i', x_i'_def⟩ -- Wait, what? I expected a backward function here
+    -- Did it automatically deduce that `update` is that backward function?
+    -- Is it because index_mut uses `sorry`?
+    have: x_i' = x_i := by 
+      rw [<-x_i_def] at x_i'_def; exact x_i'_def
+    subst x_i'
+    -- For now this seems to make things cleaner
+    progress as ⟨succ_i, succ_i_def⟩
+    -- And now, for the inductive step
+    progress as ⟨x', c1, x'Length, c1_booly, loop_inv⟩
+    simp
+    split_conjs 
+    · simp [x'Length, List.length_update]
+    · assumption
+    · -- This part is a bit longer. Let's write down the goal
+      -- Goal: ⟦x'⟧ + c1·2^(32*x.len) = ⟦x⟧ + 2^(32*i)·⟦y[i:0]⟧ + c0·2^(32·i)
+      -- Hypo: ⟦x'⟧ + c1·2^(32*x.len) = ⟦{x with i := sum_2}⟧ + 2^(32·(i+1))·⟦y[i+1:0]⟧
+      -- This is quite similar to what we had before
+      simp [loop_inv, succ_i_def, toInt]
+      rw [
+        toInt_aux_update x i.toNat sum_2 (by scalar_tac),
+        toInt_aux_drop y i.toNat (by scalar_tac),
+        <-x_i_def,
+        <-y_i_def,
+      ]
+      -- Right now I can't simply `ring_nf` since the definitions
+      -- for `sum_1` and `sum_2` contain conditionals.
+      -- I'll destruct by cases and see if I can solve the resulting
+      -- goals more easily.
+      -- Before that though, let's get rid of some unimportant details
+      generalize toInt_aux (List.drop (i.toNat + 1) (y.val)) = num_y_rest
+      generalize toInt_aux (x.val) = num_x
+      simp [ite_prop_iff_or] at sum_1_def sum_2_def
+      have max_def : U32.max = 2^32 - 1 := rfl
+      match sum_1_def, sum_2_def with
+      | .inl ⟨bounds1, sum_1_def, didOverflow_1_def⟩
+      , .inl ⟨bounds2, sum_2_def, didOverflow_2_def⟩ =>
+
+          -- I still have a pretty complicated result that `ring_nf` is not able
+          -- to close. Let's look into it a bit more carefully.
+          /-
+          ⊢ 2 ^ (32 * (↑i).toNat) * (↑x_i + ↑c0' - U32.max - 1 + ↑y_i - U32.max - 1 - ↑x_i)  +  2 ^ (32 * ((↑i).toNat + 1)) * num_y_rest  +  ↑c01 * 2 ^ (32 * ((↑i).toNat + 1)) =
+                                                                                      ....  +  2 ^ (32 * (↑i).toNat) * 2^32 * num_y_rest  +  ↑c01 * 2 ^ (32 * (↑i).toNat) * 2^32 =
+            2 ^ (32 * (↑i).toNat) * (     + ↑c0' - U32.max - 1 + ↑y_i - U32.max - 1       + 2^32 * num_y_rest + ↑c01 * 2^32 ) =
+            2 ^ (32 * (↑i).toNat) * (     + ↑c0' -    2^32     + ↑y_i    - U32.max - 1       + 2^32 * num_y_rest + ↑c01 * 2^32 ) =
+            -- What's crucial here is that `c01 = 2`! But this is not done automatically unless
+            2 ^ (32 * (↑i).toNat) * (↑y_i + 2 ^ 32 * num_y_rest) + ↑c0 * 2 ^ (32 * (↑i).toNat)
+          -/
+          simp [didOverflow_1_def, didOverflow_2_def] at u1_def u2_def
+          simp [u1_def, u2_def, c01_def]
+          simp [sum_2_def, sum_1_def]
+          scalar_tac
+      | .inr ⟨bounds1, sum_1_def, didOverflow_1_def⟩
+      , .inl ⟨bounds2, sum_2_def, didOverflow_2_def⟩ =>
+          simp [didOverflow_1_def, didOverflow_2_def] at u1_def u2_def
+          simp [u1_def, u2_def, c01_def]
+          simp [sum_2_def, sum_1_def]
+          simp [c0'_def]
+          -- I would expect this to be closed by `ring_nf`.
+          rw[max_def]
+          ring_nf
+      | .inl ⟨bounds1, sum_1_def, didOverflow_1_def⟩
+      , .inr ⟨bounds2, sum_2_def, didOverflow_2_def⟩ =>
+          simp [didOverflow_1_def, didOverflow_2_def] at u1_def u2_def
+          simp [u1_def, u2_def, c01_def]
+          simp [sum_2_def, sum_1_def]
+          simp [c0'_def]
+          rw[max_def]
+          ring_nf
+      | .inr ⟨bounds1, sum_1_def, didOverflow_1_def⟩
+      , .inr ⟨bounds2, sum_2_def, didOverflow_2_def⟩ =>
+          simp [didOverflow_1_def, didOverflow_2_def] at u1_def u2_def
+          simp [u1_def, u2_def, c01_def]
+          simp [sum_2_def, sum_1_def]
+          simp [c0'_def]
+          ring_nf
+      -- These results seem to require all the same proof. We could probably use
+      -- tacticals to make this shorter. Is it useful though?
+termination_by x.length - i.toNat
+decreasing_by 
+  any_goals simp_wf
+  scalar_tac
+    
 
 /- [tutorial::add_with_carry]:
    Source: 'src/lib.rs', lines 37:0-37:55 -/
@@ -995,7 +1094,13 @@ theorem add_with_carry_spec
   c.val ≤ 1 ∧
   toInt x' + c.val * 2 ^ (32 * x'.length) = toInt x + toInt y := by
   rw [add_with_carry]
-  sorry
+  progress as ⟨x', carry, x'Len, carry_booly, loop_inv⟩
+  simp [hLength, x'Len, carry_booly, loop_inv, toInt_aux_update]
+  simp [hLength] at loop_inv
+  rw[<-loop_inv]
+  simp [hLength] 
+  apply Or.inl -- Why the carry = 0?
+  scalar_tac
 
 /- Bonus exercises -/
 /-- We leave it to you to state the theorems for the functions below -/
