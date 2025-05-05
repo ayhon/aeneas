@@ -18,7 +18,7 @@ def Array.to_slice {α : Type u} {n : Usize} (v : Array α n) : Slice α :=
 
 def Array.from_slice {α : Type u} {n : Usize} (a : Array α n) (s : Slice α) : Array α n :=
   if h: s.val.length = n.val then
-    ⟨ s.val, by simp [*] ⟩
+    ⟨ s.val, h ⟩
   else a -- Unreachable case
 
 @[simp]
