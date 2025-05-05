@@ -440,6 +440,7 @@ def core.slice.index.SliceIndexRangeFromUsizeSlice.index_mut {T : Type}
           else s )
   else fail .panic
 
+
 /- Trait implementation: [core::slice::index::private_slice_index::{core::slice::index::private_slice_index::Sealed for core::ops::range::RangeFrom<usize>}] -/
 @[reducible]
 def core.slice.index.private_slice_index.SealedRangeFromUsize :
