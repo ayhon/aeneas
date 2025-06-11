@@ -288,10 +288,14 @@ def progressWith (fExpr : Expr) (th : Expr)
             logWarning m!"Too many ids provided ({ids0}) not enough conjuncts to split in the postcondition"
             pure (Ok (hPost.fvarId! :: hPosts).reverse.toArray)
         let curPostId := (← hPost.fvarId!.getDecl).userName
-        splitPostWithIds curPostId [] hPost ids
+        let res ← splitPostWithIds curPostId [] hPost ids
+        if let Ok hPosts := res then
+          trace[Progress] "type of hPosts is {← hPosts.mapM (·.getType >>= (liftM ∘ ppExpr))}"
+        return res
   match res with
   | Error msg => return (Error msg) -- Can we get there? We're using "return"
-  | Ok hPosts => withMainContext do
+  | Ok hPosts =>
+    trace[Progress] "type of hPosts is {← hPosts.mapM (·.getType >>= (liftM ∘ ppExpr))}"
     -- Update the set of goals
     let curGoals ← getUnsolvedGoals
     trace[Progress] "current goals: {curGoals}"
