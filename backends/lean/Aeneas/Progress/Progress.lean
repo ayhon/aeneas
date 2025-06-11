@@ -291,7 +291,7 @@ def progressWith (fExpr : Expr) (th : Expr)
         splitPostWithIds curPostId [] hPost ids
   match res with
   | Error msg => return (Error msg) -- Can we get there? We're using "return"
-  | Ok hPosts =>
+  | Ok hPosts => withMainContext do
     -- Update the set of goals
     let curGoals ← getUnsolvedGoals
     trace[Progress] "current goals: {curGoals}"
